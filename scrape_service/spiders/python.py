@@ -3,12 +3,13 @@ import re
 import time
 
 import scrapy
-from scrapy.shell import inspect_response
 from selenium import webdriver
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from nltk.corpus import stopwords
+
 
 from scrape_service.items import VacancyItem
 
@@ -32,7 +33,7 @@ class PythonSpider(scrapy.Spider):
         headers = {"User-Agent": "Mozilla/5.0"}
 
         chrome_options = webdriver.ChromeOptions()
-        chrome_options.add_argument('--headless')
+        chrome_options.add_argument("--headless")
         driver = webdriver.Chrome(options=chrome_options)
         wait = WebDriverWait(driver, 10)
 
@@ -78,14 +79,22 @@ class PythonSpider(scrapy.Spider):
         item["location"] = location.strip() if location else None
         salary = response.css(".salary::text").get()
         item["salary"] = salary.replace("\xa0", " ").strip() if salary else None
-        item["location"] = response.css(".place::text").get().replace("&nbsp", "").strip()
+        item["location"] = (
+            response.css(".place::text").get().replace("&nbsp", "").strip()
+        )
         item["company"] = response.css(".b-compinfo div.info div.l-n a::text").get()
-        item["company_url"] = response.css(".b-compinfo div.info div.l-n a").attrib["href"]
-        description = response.css('.b-typo.vacancy-section').xpath('string()').get()
-        description = re.sub(r'[\n\t\xa0]', ' ', description)
-        description = re.sub(r'\s+', ' ', description)
-        description = re.sub(r'[^\w\s,]', '', description)
-        description = description.strip()
-        item["description"] = description
+        item["company_url"] = response.css(".b-compinfo div.info div.l-n a").attrib[
+            "href"
+        ]
+        description = response.css(".b-typo.vacancy-section").xpath("string()").get()
+        item["description"] = self.normalize_description(description) if description else None
 
         yield item
+
+    @staticmethod
+    def normalize_description(description):
+        tokens = re.findall(r'\b[a-zA-Z+-]+\b', description)
+        tokens = [token.lower() for token in tokens if token != '-']
+
+        stop_words = set(stopwords.words('english'))
+        return [word for word in tokens if word not in stop_words]
